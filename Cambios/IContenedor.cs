@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ServiceModel;
 using ConsoleApplicationServer.Models;
 
@@ -14,10 +16,15 @@ namespace ConsoleApplicationServer.Cambios
         void Unsubscribe();
 
         [OperationContract]
-        IList<Contenedor> GetAllContenedores();
+        IList<Contenedor> obtenerTodasImportaciones();
 
         [OperationContract]
-        void PublishContenedorChange(string regimen, string buque, int viaje);
-    }
+        IList<Contenedor> obtenerTodasExportaciones();
 
+        [OperationContract]
+        void cambioImportaciones(string ID, string BUQUE, string CONTENEDOR, string VIAJE, string FECHA_ENTRADA, string ESTADO, string ALMACEN);
+
+        [OperationContract]
+        void cambioExportaciones(string ID, string BUQUE, string CONTENEDOR, string VIAJE, string FECHA_ENTRADA, string ESTADO, string ALMACEN);
+    }
 }

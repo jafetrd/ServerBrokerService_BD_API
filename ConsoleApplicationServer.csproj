@@ -56,9 +56,15 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Cambios\IContenedor3.cs" />
+    <Compile Include="Cambios\IContenedor2.cs" />
+    <Compile Include="Cambios\IContenedor4.cs" />
     <Compile Include="Models\Contenedor.cs" />
     <Compile Include="Cambios\IFerrocarrilCallBack.cs" />
     <Compile Include="Cambios\IContenedor.cs" />
+    <Compile Include="Servicio\buques.cs" />
+    <Compile Include="Servicio\clientes.cs" />
+    <Compile Include="Servicio\productos.cs" />
     <Compile Include="Servicio\tabla_contenedor.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

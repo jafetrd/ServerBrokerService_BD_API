@@ -7,7 +7,7 @@ using ConsoleApplicationServer.Models;
 using ConsoleApplicationServer.Cambios;
 using TableDependency.EventArgs;
 using TableDependency.SqlClient;
-
+using static ConsoleApplicationServer.Servicio.extensionDataRead;
 namespace ConsoleApplicationServer.Servicio
 {
     [ServiceBehavior(InstanceContextMode = InstanceContextMode.Single, ConcurrencyMode = ConcurrencyMode.Single)]
@@ -15,11 +15,9 @@ namespace ConsoleApplicationServer.Servicio
     {
         #region Instance variables
 
-        private readonly List<IContenedorCallback> _callbackList =
-                new List<IContenedorCallback>();
+        private readonly List<IContenedorCallback> _callbackList = new List<IContenedorCallback>();
         private readonly string _connectionString;
         private readonly SqlTableDependency<Contenedor> _sqlTableDependency;
-
         #endregion
 
         #region Constructors
@@ -28,13 +26,15 @@ namespace ConsoleApplicationServer.Servicio
         {
             _connectionString = ConfigurationManager.ConnectionStrings["connectionString"].ConnectionString;
 
-            _sqlTableDependency = new SqlTableDependency<Contenedor>(_connectionString, "tabla_patio_contenedor");
+            _sqlTableDependency = new SqlTableDependency<Contenedor>(_connectionString, "temporal");
 
             _sqlTableDependency.OnChanged += TableDependency_Changed;
-            _sqlTableDependency.OnError += (sender, args) => Console.WriteLine($"Error: {args.Message}");
+            _sqlTableDependency.OnError += (sender, args) => Console.WriteLine($"error: {args.Message}");
             _sqlTableDependency.Start();
 
-            Console.WriteLine(@"Waiting for receiving notifications...");
+            while (!(_sqlTableDependency.Status == TableDependency.Enums.TableDependencyStatus.WaitingForNotification)){ }
+
+            Console.WriteLine(@"ESPERANDO NOTIFICACIONES 1");
         }
 
         #endregion
@@ -48,48 +48,76 @@ namespace ConsoleApplicationServer.Servicio
             Console.WriteLine(Environment.NewLine);
             Console.WriteLine($"DML: {e.ChangeType}");
             Console.WriteLine($"regimen: {e.Entity.REGIMEN}");
-            Console.WriteLine($"buque: {e.Entity.BUQUE}");
-            Console.WriteLine($"viaje: {e.Entity.VIAJE}");
-
-            this.PublishContenedorChange(e.Entity.REGIMEN, e.Entity.BUQUE, e.Entity.VIAJE);
+            Console.WriteLine($"TABLA : CONTENEDOR");
+            switch (e.Entity.REGIMEN)
+            {
+                case "IMPO":
+                this.cambioImportaciones(e.Entity.ID, e.Entity.BUQUE, e.Entity.INICIALES + e.Entity.NUMERO, e.Entity.VIAJE, e.Entity.FECHA_ENTRADA, e.Entity.ESTADO, e.Entity.ALMACEN);
+                    break;
+                case "EXPO":
+                this.cambioExportaciones(e.Entity.ID, e.Entity.BUQUE, e.Entity.INICIALES + e.Entity.NUMERO, e.Entity.VIAJE, e.Entity.FECHA_ENTRADA, e.Entity.ESTADO, e.Entity.ALMACEN);
+                    break;
+            }
         }
 
-        #endregion
-
-        #region Publish-Subscribe design pattern
-
-        public IList<Contenedor> GetAllContenedores()
+        public IList<Contenedor> obtenerTodasImportaciones()
         {
-            var contenedores = new List<Contenedor>();
-
             using (var sqlConnection = new SqlConnection(_connectionString))
             {
                 sqlConnection.Open();
                 using (var sqlCommand = sqlConnection.CreateCommand())
                 {
-                    sqlCommand.CommandText = "SELECT * FROM [tabla_patio_contenedor]";
+                    sqlCommand.CommandText = "SELECT * FROM [Temporal] WHERE REGIMEN = @REGIMEN";
+                    sqlCommand.Parameters.AddWithValue("@REGIMEN", "IMPO");
 
-                    using (var sqlDataReader = sqlCommand.ExecuteReader())
-                    {
-                        while (sqlDataReader.Read())
-                        {
-                            string regimen = sqlDataReader.GetString(sqlDataReader.GetOrdinal("REGIMEN"));
-                            string buque = sqlDataReader.GetString(sqlDataReader.GetOrdinal("BUQUE"));
-                            int viaje = sqlDataReader.GetInt32(sqlDataReader.GetOrdinal("VIAJE"));
-
-                            contenedores.Add(new Contenedor
-                            {
-                                REGIMEN = regimen,
-                                BUQUE = buque,
-                                VIAJE = viaje
-                            });
-                        }
-                    }
+                    return GetContenedors(sqlCommand);
                 }
             }
+        }
 
+        public IList<Contenedor> obtenerTodasExportaciones()
+        {
+
+            //List<Contenedor> contenedores;
+            using (var sqlConnection = new SqlConnection(_connectionString))
+            {
+                sqlConnection.Open();
+                using (var sqlCommand = sqlConnection.CreateCommand())
+                {
+                    sqlCommand.CommandText = "SELECT * FROM [Temporal] WHERE REGIMEN = @REGIMEN";
+                    sqlCommand.Parameters.AddWithValue("@REGIMEN", "EXPO");
+
+                    return GetContenedors(sqlCommand);
+                }
+            }
+        }
+
+        private IList<Contenedor> GetContenedors(SqlCommand sqlCommand)
+        {
+            var contenedores = new List<Contenedor>();
+            using (var sqlDataReader = sqlCommand.ExecuteReader())
+            {
+                if (sqlDataReader.HasRows)
+                    while (sqlDataReader.Read())
+                    {
+                        contenedores.Add(new Contenedor
+                        {
+                            ID = sqlDataReader.SafeGetString("ID"),
+                            BUQUE = sqlDataReader.SafeGetString("BUQUE"),
+                            CONTENEDOR = sqlDataReader.SafeGetString("INICIALES") + sqlDataReader.SafeGetString("NUMERO"),
+                            VIAJE = sqlDataReader.SafeGetString("VIAJE"),
+                            FECHA_ENTRADA = sqlDataReader.SafeGetString("FECHA_ENTRADA"),
+                            ESTADO = sqlDataReader.SafeGetString("ESTADO"),
+                            ALMACEN = sqlDataReader.SafeGetString("ALMACEN")
+                        });
+                    }
+            }
             return contenedores;
         }
+        #endregion
+
+        #region Publish-Subscribe design pattern
+
 
         public void Subscribe()
         {
@@ -109,13 +137,20 @@ namespace ConsoleApplicationServer.Servicio
             }
         }
 
-        public void PublishContenedorChange(string regimen, string buque, int viaje)
+
+        public void cambioImportaciones(string ID, string BUQUE, string CONTENEDOR,string VIAJE, string FECHA_ENTRADA,string ESTADO,string ALMACEN)
         {
             _callbackList.ForEach(delegate (IContenedorCallback callback) {
-                callback.cambioContenedor(buque, viaje, regimen);
+                callback.cambiosImpo(ID, BUQUE, CONTENEDOR, VIAJE, FECHA_ENTRADA,ESTADO,ALMACEN);
             });
         }
 
+        public void cambioExportaciones(string ID, string BUQUE, string CONTENEDOR, string VIAJE, string FECHA_ENTRADA,string ESTADO,string ALMACEN)
+        {
+            _callbackList.ForEach(delegate (IContenedorCallback callback) 
+            {callback.cambiosExpo(ID, BUQUE, CONTENEDOR, VIAJE, FECHA_ENTRADA, ESTADO,ALMACEN);
+            });
+        }
         #endregion
 
         #region IDisposable
@@ -124,9 +159,22 @@ namespace ConsoleApplicationServer.Servicio
         {
             _sqlTableDependency.Stop();
         }
-
-
-
         #endregion
+    }
+
+    public static class extensionDataRead
+    {
+        public static string SafeGetString(this SqlDataReader reader, string Columna)
+        {
+            int columIndex = reader.GetOrdinal(Columna);
+            if (!reader.IsDBNull(columIndex))
+            {
+                return reader.GetString(columIndex);
+            }
+            else
+            {
+                return string.Empty;
+            }
+        }
     }
 }
